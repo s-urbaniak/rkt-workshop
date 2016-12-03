@@ -1,0 +1,19 @@
+vagrant plugin install vagrant-vbguest
+
+sudo rkt run \
+    --dns=8.8.8.8 \
+    --hostname=caddy.rktnet \
+    --net=bridgenet:IP=10.2.0.10 \
+    --hosts-entry 10.2.0.10=caddy.rktnet \
+    --hosts-entry 10.2.0.11=inspector.rktnet \
+    --volume=www,kind=host,source=$HOME/src/www --mount=volume=www,target=/var/www/html \
+    docker://joshix/caddy
+
+sudo rkt run \
+    --dns=8.8.8.8 \
+    --hostname=inspector.rktnet \
+    --net=bridgenet:IP=10.2.0.11 \
+    --hosts-entry 10.2.0.10=caddy.rktnet \
+    --hosts-entry 10.2.0.11=inspector.rktnet \
+    s-urbaniak.github.io/images/inspector:0.0.2
+
