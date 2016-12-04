@@ -13,7 +13,7 @@ To set up a route to your VM, execute ([iproute2](http://www.linuxfoundation.org
 # ip route add 10.2.0.0/24 via <vm-ip>
 ```
 
-Replace `<vm-iface>` and `<vm-ip>` with the corresponding Vagrant VM interface and IP address. Example:
+Replace `<vm-ip>` with the corresponding Vagrant VM interface and IP address. Example:
 ```
 $ vagrant ssh -c 'ip address show dev eth1 | grep inet'
     inet 172.28.128.3/24 brd 172.28.128.255 scope global dynamic eth1
