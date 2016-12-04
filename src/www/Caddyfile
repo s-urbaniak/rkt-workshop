@@ -3,7 +3,8 @@ log stdout
 errors stderr
 browse
 markdown
-proxy /inspector inspector.rktnet:8080 {
+
+proxy /inspector localhost:8080 {
   without /inspector
   health_check /healthz
 }

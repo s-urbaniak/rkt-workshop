@@ -9,5 +9,5 @@ Vagrant.configure("2") do |config|
 
   config.vm.network "private_network", type: "dhcp"
   config.vm.provision :shell, :privileged => true, :path => "install-rkt.sh"
-  config.vm.synced_folder "./src", "/home/vagrant/src"
+#  config.vm.synced_folder "./src", "/home/vagrant/src"
 end
