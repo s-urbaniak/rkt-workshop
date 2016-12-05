@@ -1,0 +1,445 @@
+Basics with rkt, the container engine by CoreOS
+
+Dec 5th 2016
+
+Sergiusz Urbaniak
+rkt Engineer, CoreOS
+sur@coreos.com
+@_surbaniak
+
+* Overview
+
+.image https://github.com/coreos/rkt/raw/master/logos/rkt-horizontal-color.png _ 200
+
+Requirements:
+
+- Vagrant
+- Virtualbox
+
+* Setup
+
+We will:
+
+- use Linux Fedora 25
+- install [[http://github.com/coreos/rkt][rkt]]
+- install [[https://github.com/containers/build][acbuild]]
+
+  git clone https://github.com/s-urbaniak/rkt-workshop
+  cd vagrant
+  vagrant up
+  vagrant ssh
+
+* Starting nginx
+
+Simple one-shot command
+
+  $ sudo rkt run --insecure-options=image docker://nginx
+
+In another terminal:
+
+  $ rkt list
+  [vagrant@localhost ~]$ rkt list
+  UUID		APP      ... NETWORKS
+  0e32f69d	busybox  ... default:ip4=172.16.28.2
+
+  $ curl 172.16.28.2
+  curl 172.16.28.2
+  <!DOCTYPE html>
+  <html>
+  <head>
+  <title>Welcome to nginx!</title>
+  ...
+
+quit by hitting `Ctrl-]` three times
+
+* Starting caddy
+
+Fetch first, then run:
+
+  $ sudo rkt fetch --insecure-options=image docker://joshix/caddy
+
+  $ sudo rkt run \
+    --volume=www,kind=host,source=/vagrant/src/www \
+    --mount=volume=www,target=/var/www/html \
+    docker://joshix/caddy
+
+Prepare, then run:
+
+  $ sudo rkt prepare docker://joshix/caddy
+  ...
+  8978e12d-6687-47e3-9480-69e3a155295c
+
+ 
+
+  $ sudo rkt run-prepared 8978e12d-6687-47e3-9480-69e3a155295c
+
+* Starting an interactive busybox
+
+  $ sudo rkt run --insecure-options=image --interactive docker://progrium/busybox
+  
+  image: using image from local store for image name coreos.com/rkt/stage1-coreos:1.17.0
+  image: using image from local store for url docker://progrium/busybox
+  networking: loading networks from /etc/rkt/net.d
+  networking: loading network default with type ptp
+  / #
+
+ 
+
+  / # ping www.google.de
+  ping: bad address 'www.google.de'
+
+Note: pod doesn't have DNS by default
+
+Start the pod above using `--dns=8.8.8.8`
+
+* Operations on pods
+
+
+  $ rkt list --format=json
+  [{"name":"f64282eb-9f76-4b5d-8d48-bd2b3c7c41e6","state":"running","networks":[{"netName":"default","netConf":"net/99-default.conf","pluginPath":"stage1/rootfs/usr/lib/rkt/plugins/net/ptp","ifName":"eth0","ip":"172.16.28.3","args":"","mask":"255.255.255.0"}],"app_names":["nginx"]}]
+
+ 
+
+  $ rkt status f64282eb-9f76-4b5d-8d48-bd2b3c7c41e6
+  state=running
+  created=2016-10-20 12:37:34.069 +0000 UTC
+  started=2016-10-20 12:37:34.163 +0000 UTC
+  networks=default:ip4=172.16.28.3
+  pid=8113
+
+ 
+  $ sudo rkt stop f64282eb-9f76-4b5d-8d48-bd2b3c7c41e6
+  "f64282eb-9f76-4b5d-8d48-bd2b3c7c41e6"
+
+ 
+
+  $ rkt cat-manifest f64282eb-9f76-4b5d-8d48-bd2b3c7c41e6
+  {
+  	"acVersion": "1.17.0",
+  	"acKind": "PodManifest",
+  ...
+
+* Operations on images
+
+Listing images
+
+  $ rkt image list
+  ID			NAME						SIZE	IMPORT TIME	LAST USED
+  sha512-3214c5b3dad1	quay.io/coreos/hyperkube:v1.4.3_coreos.0	1.2GiB	9 minutes ago	9 minutes ago
+  sha512-06ef01473d5f	quay.io/coreos/etcd:v2.3.7			62MiB	9 minutes ago	9 minutes ago
+  sha512-bd4c342830c8	coreos.com/rkt/stage1-coreos:1.17.0		179MiB	8 minutes ago	8 minutes ago
+  sha512-ec6258f8adf2	coreos.com/rkt/stage1-fly:1.17.0		17MiB	4 minutes ago	4 minutes ago
+  sha512-1e315d546ce1	registry-1.docker.io/library/nginx:latest	356MiB	2 minutes ago	2 minutes ago
+
+Deleting an image
+
+  $ sudo rkt image rm quay.io/josh_wood/caddy
+
+* Cleaning up
+
+rkt does not have a daemon, hence cleaning up is done manually, or in a cron-like job:
+
+  $ sudo rkt gc --grace-period=0s
+
+* Starting rkt in the background
+
+i.e. 
+
+  $ sudo rkt run docker://nginx &
+
+not a good idea, rather start a transient systemd unit using [[https://www.freedesktop.org/software/systemd/man/systemd-run.html][systemd-run]]:
+
+  $ sudo systemd-run \
+    --unit nginx \
+    rkt run \
+    --insecure-options docker://nginx
+  Running as unit nginx.service.
+
+* Starting rkt in the background
+
+To reset systemd state in case units fail or stop, execute:
+
+  $ sudo systemctl reset-failed
+
+inspect logs using:
+
+  $ sudo journalctl -u nginx.service
+
+stop the unit using:
+
+  $ sudo systemctl stop nginx.service
+
+* rkt Documentation
+
+We have quite nice man pages:
+
+  man rkt
+  man rkt-run
+  man rkt-prepare
+  man rkt-gc
+  man rkt-fetch
+  man rkt-image
+  man rkt-image-rm
+
+.link https://github.com/coreos/rkt/tree/master/Documentation
+
+* Let's step back
+
+.image os-procs.png _ 200
+
+In a classical "OS" setup we have:
+
+- A supervisor, aka "init daemon", aka PID1
+- Not only one process, but many processes
+- Processes work together, either via localhost net, IPC
+- Communicate with outside world
+
+* rkt - Pods
+
+.image pod-apps.png _ 300
+
+- Grouping of applications executing in a shared context (network, namespaces, volumes)
+- Shared fate
+- The _only_ execution primitive: single applications are modelled as singleton pods
+
+* rkt - Sample Pod: micro-service talking to Redis
+
+.image redis-service.png _ 230
+
+  sudo rkt run \
+    --insecure-options=image docker://redis \
+    s-urbaniak.github.io/images/redisservice:0.0.3
+
+.link https://github.com/s-urbaniak/redis-service
+
+* Pods - Patterns, patterns everywhere
+
+Container/App Design Patterns
+
+- Kubernetes enables new design patterns
+- Similar to OO patterns
+- Key difference: technologically agnostic
+
+.link http://blog.kubernetes.io/2016/06/container-design-patterns.html
+.link https://www.usenix.org/system/files/conference/hotcloud16/hotcloud16_burns.pdf
+
+* Pods - Sidecar pattern
+
+.image pattern-sidecar.png _ 400
+
+- Auxiliary app
+- Extend, enhance main app
+
+Pros:
+
+- Separate packaging units
+- Each app contained in a separate failure boundary
+- Potentially different technologies/languages
+
+* Pods - Ambassador pattern
+
+.image pattern-ambassador.png _ 400
+
+- Proxy communication
+- Separation of concerns
+- Main app has simplified view
+
+* Pods - Adapter pattern
+
+.image pattern-adapter.png _ 400
+
+- Use an interface of an existing app as another interface
+- Very useful for legacy apps, translating protocols
+
+* Pods - Leader election pattern
+
+.image pattern-leader.png _ 400
+
+- Separate the leader logic from the election logic
+- Swappable algorithms/technologies/environments
+
+Ready-to-use generic leader elector:
+
+.link http://blog.kubernetes.io/2016/01/simple-leader-election-with-Kubernetes.html
+
+* Pods - Work queue pattern
+
+.image pattern-work-queue.png _ 400
+
+- Separate app logic from queue enqueing/dequeing
+
+* Pods - Scatter gather pattern
+
+.image pattern-scatter-gather.png _ 400
+
+- Main app sends a simple request
+- Auxiliary app implements complex scatter/gather logic
+- Fan-Out/Fan-In requests separate from main app
+
+* Building pods - a small web app
+
+  $ cat /home/vagrant/gopath/src/app/app.go
+
+.code app.go
+
+* Create a GPG key
+
+1. Create a key (if you don't have one already)
+
+  $ gpg2 --full-gen-key
+
+2. Trust the key
+
+  $ gpg2 --armor --export your@email.com >public.asc
+  $ sudo rkt trust --prefix=workshop ./public.asc
+
+* Create an ACI image
+
+  $ cat /home/vagrant/gopath/src/app/acbuild.sh
+
+.code acbuild.sh 1,20
+
+* Create an ACI image
+
+.code acbuild.sh 21,
+
+  $ sudo rkt run ./app-0.0.1-linux-amd64.aci
+
+* What if I have Docker images?
+
+- No need to convert them
+- Just use
+
+  rkt run --insecure-options=image docker://app
+
+* rkt - Networking
+
+The CNI (Container Network Interface)
+
+.image pod-net.png _ 300
+
+- Abstraction layer for network configuration
+- Single API to multiple, extensible networks
+- Narrow, simple API
+- Plugins for third-party implementations
+
+* rkt - Networking - Host Mode
+
+.image host-mode.png _ 300
+
+  rkt run --net=host ...
+
+- Inherit the network namespace of the process that is invoking rkt.
+- Pod apps are able to access everything associated with the host’s network interfaces.
+
+*Workshop*time*
+
+1. Start nginx using `--net=host`
+
+* rkt - Networking - Default Mode (CNI ptp)
+
+.image ptp.png _ 300
+
+  rkt run --net ...
+  rkt run --net=default ...
+
+.link https://github.com/containernetworking/cni/blob/master/Documentation/ptp.md
+
+- Creates a virtual ethernet pair
+- One placed in the pod
+- Other one placed on the host
+
+* rkt - Networking - CNI brigde
+
+.image bridge.png _ 300
+
+.link https://github.com/containernetworking/cni/blob/master/Documentation/bridge.md
+
+- Creates a virtual ethernet pair
+- One placed in the pod
+- Other one placed on the host
+- Host veth pluggind into a linux bridge
+
+* rkt - Networking - CNI macvlan
+
+.image macvlan.png _ 300
+
+.link https://github.com/containernetworking/cni/blob/master/Documentation/macvlan.md
+
+- Functions like a switch
+- Pods get different MAC addresses
+- Pods share the same physical device
+
+* rkt - Networking - CNI ipvlan
+
+.image ipvlan.png _ 300
+
+.link https://github.com/containernetworking/cni/blob/master/Documentation/ipvlan.md
+
+- Functions like a switch
+- Pods share the same MAC address
+- Pods get different IPs
+- Pods share the same physical device
+
+* rkt - Networking - SDN (software defined networking)
+
+.image pod-net-canal.png 300 _
+
+- Communicate with pods across different _hosts_
+- Each pod across all hosts gets its own IP
+- Virtual overlay network
+
+* rkt - Networking example
+
+.image bridgenet.png _ 500
+
+* rkt - Networking
+
+Example: bridge two pods, so they can see each other
+
+  $ cat /etc/rkt/net.d/bridgenet.conf
+  {
+      "name": "bridgenet",
+      "type": "bridge",
+      "bridge": "rkt-bridgenet",
+      "ipMasq": true,
+      "isGateway": true,
+      "ipam": {
+          "type": "host-local",
+          "subnet": "10.2.0.0/24",
+          "routes": [
+                  { "dst": "0.0.0.0/0" }
+          ]
+      }
+  }
+
+* rkt - Networking
+
+Start the redis pod
+
+  $ sudo systemd-run \
+      --unit=redis \
+      rkt run \
+      --dns=8.8.8.8 \
+      --hostname=redis \
+      --net=bridgenet:IP=10.2.0.10 \
+      --hosts-entry 10.2.0.10=redis \
+      --hosts-entry 10.2.0.11=counter \
+      --insecure-options=image \
+      docker://redis
+
+* rkt - Networking
+
+Start the counter pod
+
+  # sudo systemd-run \
+      --unit=counter \
+      rkt run \
+      --dns=8.8.8.8 \
+      --hostname=counter \
+      --net=bridgenet:IP=10.2.0.11 \
+      --hosts-entry 10.2.0.10=redis \
+      --hosts-entry 10.2.0.11=counter \
+      s-urbaniak.github.io/images/redisservice:0.0.3 \
+      -- \
+      -redis-addr=redis:6379

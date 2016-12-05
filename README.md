@@ -26,13 +26,10 @@ $ sudo ip route add 10.2.0.0/24 via 172.28.128.3
 
 ### Single pod, multiple apps
 ```
-# systemd-run \
-    --unit=caddy \
-    rkt run \
-    --dns=8.8.8.8 \
-    --volume=www,kind=host,source=/vagrant/src/www --mount=volume=www,target=/var/www/html \
-    --insecure-options=image docker://joshix/caddy \
-    s-urbaniak.github.io/images/inspector:0.0.2
+# sudo rkt run \
+    --volume=www,kind=host,source=/vagrant/src/www \
+    --mount=volume=www,target=/var/www/html \
+    --insecure-options=image docker://joshix/caddy
 ```
 
 ### Poor man's service discovery
