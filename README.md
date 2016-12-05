@@ -4,6 +4,8 @@
 
 Installation:
 ```
+$ git clone https://github.com/s-urbaniak/rkt-workshop
+$ cd rkt-workshop
 $ vagrant up
 ```
 
